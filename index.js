@@ -115,6 +115,6 @@ app.post('/v1/private', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 BibleFi BWTYA API running on port ${PORT}`);
 });
