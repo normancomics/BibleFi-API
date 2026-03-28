@@ -1,120 +1,104 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+
+// ── Middleware ────────────────────────────────────────────────────────────────
+import {
+  corsOptions,
+  globalRateLimit,
+  strictRateLimit,
+  requestLogger,
+  errorHandler,
+} from './src/middleware/index.js';
+
+// ── Route handlers ────────────────────────────────────────────────────────────
+import marketRouter    from './src/routes/market.js';
+import scriptureRouter from './src/routes/scripture.js';
+import churchesRouter  from './src/routes/churches.js';
+import streamsRouter   from './src/routes/streams.js';
+import x402Router      from './src/routes/x402.js';
+import mcpRouter       from './src/routes/mcp.js';
+import a2aRouter       from './src/routes/a2a.js';
+
+// ── Background jobs ───────────────────────────────────────────────────────────
+import { registerJobs } from './src/jobs/index.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+// ── Core middleware ───────────────────────────────────────────────────────────
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '1mb' }));
+app.use(requestLogger);
+app.use(globalRateLimit);
 
+// ── Health / discovery ────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     agent: 'BWTYAA - Biblical Wisdom To Yield Algorithm Agent',
-    version: '1.0.0',
+    version: '2.0.0',
     status: 'operational',
     operator: 'normancomics.eth',
+    network: 'base',
+    chainId: 8453,
     timestamp: new Date().toISOString(),
     endpoints: {
-      a2a: '/a2a',
-      mcp: '/mcp',
-      x402: '/x402',
-      market: '/v1/market',
-      scripture: '/v1/scripture-match',
+      a2a:      '/a2a',
+      mcp:      '/mcp',
+      x402:     '/x402',
+      market:   '/v1/market',
+      scripture:'/v1/scripture-match',
       churches: '/v1/churches',
-      streams: '/v1/streams',
-      private: '/v1/private'
-    }
-  });
-});
-
-app.post('/a2a', (req, res) => {
-  res.json({
-    protocol: 'A2A',
-    status: 'operational',
-    message: 'Agent-to-Agent communication endpoint'
-  });
-});
-
-app.post('/mcp', (req, res) => {
-  res.json({
-    protocol: 'MCP',
-    status: 'operational',
-    message: 'Model Context Protocol endpoint'
-  });
-});
-
-app.post('/x402', (req, res) => {
-  res.status(402).json({
-    protocol: 'x402',
-    message: 'Payment Required',
-    payment_required: true,
-    accepted_currencies: ['USDC', 'USDCx', 'ETH'],
-    network: 'base',
-    settlement_address: '0x7bEda57074AA917FF0993fb329E16C2c188baF08'
-  });
-});
-
-app.post('/v1/market', (req, res) => {
-  res.json({
-    capability: 'market_intelligence',
-    status: 'operational',
-    pricing: {
-      model: 'per_request',
-      amount: '0.15',
-      currency: 'USDC',
-      network: 'base'
+      streams:  '/v1/streams',
+      private:  '/v1/private',
     },
-    demo_data: {
-      base_tvl: '$2.4B',
-      top_dexs: ['Uniswap V3', 'Aerodrome', 'BaseSwap'],
-      fear_greed_index: 65
-    }
+    protocols: ['A2A', 'MCP', 'x402', 'ERC-8004'],
   });
 });
 
-app.post('/v1/scripture-match', (req, res) => {
-  res.json({
-    capability: 'biblical_defi_correlation',
-    status: 'operational',
-    scripture: {
-      reference: 'Proverbs 21:5',
-      text: 'The thoughts of the diligent tend only to plenteousness; but of every one that is hasty only to want.',
-      correlation: 'Warns against hasty trading during volatility',
-      confidence: 0.87
-    }
-  });
-});
+// ── Protocol endpoints ────────────────────────────────────────────────────────
+app.use('/a2a',  a2aRouter);
+app.use('/mcp',  mcpRouter);
+app.use('/x402', x402Router);
 
-app.post('/v1/churches', (req, res) => {
-  res.json({
-    capability: 'church_database_access',
-    status: 'coming_soon',
-    authentication: 'OAuth2 required'
-  });
-});
+// ── v1 API endpoints ──────────────────────────────────────────────────────────
+app.use('/v1/market',          strictRateLimit, marketRouter);
+app.use('/v1/scripture-match', strictRateLimit, scriptureRouter);
+app.use('/v1/churches',        churchesRouter);
+app.use('/v1/streams',         streamsRouter);
 
-app.post('/v1/streams', (req, res) => {
-  res.json({
-    capability: 'superfluid_streaming',
-    status: 'operational',
-    superfluid_links: {
-      app: 'https://app.superfluid.finance',
-      console: 'https://console.superfluid.finance'
-    }
-  });
-});
-
+// ── /v1/private (placeholder — ZKP / veil.cash integration) ──────────────────
 app.post('/v1/private', (req, res) => {
   res.json({
     capability: 'privacy_transactions',
     status: 'coming_soon',
     privacy_tech: {
       zkp_language: 'Noir',
-      protocol: 'veil.cash'
-    }
+      protocol: 'veil.cash',
+    },
   });
 });
 
+// ── 404 handler ───────────────────────────────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: `${req.method} ${req.path} is not a valid endpoint`,
+    docs: 'https://biblefi-api-production.up.railway.app/',
+  });
+});
+
+// ── Global error handler ──────────────────────────────────────────────────────
+app.use(errorHandler);
+
+// ── Start server ──────────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 BibleFi BWTYA API running on port ${PORT}`);
+  console.log(`🚀 BibleFi BWTYA API v2.0.0 running on port ${PORT}`);
+  console.log(`   Network: Base (chainId 8453)`);
+  console.log(`   Supabase: ${process.env.SUPABASE_URL ? '✅ connected' : '⚠️  not configured'}`);
+  console.log(`   OpenAI:   ${process.env.OPENAI_API_KEY ? '✅ connected' : '⚠️  not configured'}`);
+  console.log(`   Viem:     ${process.env.VIEM_PRIVATE_KEY ? '✅ configured' : '⚠️  not configured'}`);
+
+  // Start background jobs
+  registerJobs();
 });
